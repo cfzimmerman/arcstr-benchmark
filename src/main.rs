@@ -10,7 +10,7 @@ use std::{fmt::Debug, sync::Arc, time::Instant};
 use tokio::task::JoinHandle;
 
 /// Takes a threadsafe string and clones it `clone_ct` times.
-async fn task<S>(string: S, clone_ct: usize) -> ()
+async fn task<S>(string: S, clone_ct: usize)
 where
     S: AsRef<str> + Clone + Eq + Debug + Send + Sync,
 {
@@ -27,7 +27,7 @@ fn run_single(
     str_type: StrType,
 ) -> JoinHandle<()> {
     let string: String = Alphanumeric.sample_string(rng, string_len);
-    let task = match str_type {
+    match str_type {
         StrType::ArcStr => {
             // The additional `into` puts Arc<str> at a bit of a disadvantage, but it's consistent
             // with what most I/O programs will need anyway.
@@ -35,8 +35,7 @@ fn run_single(
             tokio::spawn(black_box(task(arc_str, clone_ct)))
         }
         StrType::OwnedString => tokio::spawn(black_box(task(string, clone_ct))),
-    };
-    task
+    }
 }
 
 /// Runs a series of preconfigured experiments, writing results to the given CSV file

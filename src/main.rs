@@ -45,9 +45,8 @@ async fn csv_report(
     mut csv: csv::Writer<File>,
     task_ct: usize,
     average_over: NonZeroUsize,
+    clone_ct: usize,
 ) -> anyhow::Result<()> {
-    // How many clones to run per task
-    const CLONE_CTS: [usize; 5] = [1, 2, 4, 8, 16];
     // How long each string should be
     const STR_LENS: [usize; 5] = [8, 16, 32, 64, 128];
     // Which string types to test
@@ -55,29 +54,29 @@ async fn csv_report(
 
     let num_trials: usize = average_over.into();
     let mut tasks = Vec::with_capacity(task_ct);
-    for string_len in STR_LENS {
-        for clone_ct in CLONE_CTS {
-            for str_type in STR_TYPES {
-                println!("tasks: {task_ct}, string len: {string_len}, clone ct: {clone_ct}, type: {str_type:?}");
-                let start = Instant::now();
-                for _ in 0..num_trials {
-                    assert_eq!(tasks.len(), 0);
-                    for _ in 0..task_ct {
-                        tasks.push(run_single(rng, clone_ct, string_len, str_type));
-                    }
-                    for task in tasks.drain(..) {
-                        task.await?;
-                    }
+    for str_len in STR_LENS.into_iter() {
+        for str_type in STR_TYPES {
+            println!(
+                "tasks: {task_ct}, string len: {str_len}, clone ct: {clone_ct}, type: {str_type:?}"
+            );
+            let start = Instant::now();
+            for _ in 0..num_trials {
+                assert_eq!(tasks.len(), 0);
+                for _ in 0..task_ct {
+                    tasks.push(run_single(rng, clone_ct, str_len, str_type));
                 }
-                csv.serialize(CsvRow {
-                    task_ct,
-                    num_trials,
-                    clone_ct,
-                    string_len,
-                    str_type,
-                    time_sec: start.elapsed().as_secs_f64() / num_trials as f64,
-                })?;
+                for task in tasks.drain(..) {
+                    task.await?;
+                }
             }
+            csv.serialize(CsvRow {
+                task_ct,
+                num_trials,
+                clone_ct,
+                str_len,
+                str_type,
+                time_sec: start.elapsed().as_secs_f64() / num_trials as f64,
+            })?;
         }
     }
     Ok(())
@@ -87,22 +86,6 @@ async fn csv_report(
 async fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
     let mut rng = thread_rng();
-
-    println!("warming up executor");
-    {
-        // Tokio seems to cold-start rather slowly (possibly related to thread spawning?)
-        // Running some tasks through it first helps prevent the first or only trial
-        // from being an outlier.
-        let warmup_size = 10_000;
-        let mut tasks = Vec::with_capacity(warmup_size);
-        for _ in 0..warmup_size {
-            tasks.push(tokio::spawn(run_single(&mut rng, 2, 8, StrType::ArcStr)));
-        }
-        for task in tasks {
-            task.await??;
-        }
-    }
-    println!("running test(s)");
 
     match args {
         Cli::Single {
@@ -124,10 +107,11 @@ async fn main() -> anyhow::Result<()> {
         Cli::CsvReport {
             csv_path,
             task_ct,
+            clone_ct,
             num_trials,
         } => {
             let csv = csv::Writer::from_path(csv_path)?;
-            csv_report(&mut rng, csv, task_ct, num_trials).await?;
+            csv_report(&mut rng, csv, task_ct, num_trials, clone_ct.into()).await?;
         }
     };
 

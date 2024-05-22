@@ -21,6 +21,8 @@ pub enum Cli {
         task_ct: usize,
         /// How many trials to average over per configuration
         num_trials: NonZeroUsize,
+        /// How many times each task should clone its string
+        clone_ct: NonZeroUsize,
         /// A path to the csv file where output will be written
         csv_path: PathBuf,
     },
@@ -39,7 +41,7 @@ pub struct CsvRow {
     pub task_ct: usize,
     pub num_trials: usize,
     pub clone_ct: usize,
-    pub string_len: usize,
+    pub str_len: usize,
     pub str_type: StrType,
     pub time_sec: f64,
 }

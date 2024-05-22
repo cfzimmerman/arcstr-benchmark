@@ -47,9 +47,9 @@ async fn csv_report(
     average_over: NonZeroUsize,
 ) -> anyhow::Result<()> {
     // How many clones to run per task
-    const CLONE_CTS: [usize; 4] = [1, 2, 4, 8];
+    const CLONE_CTS: [usize; 5] = [1, 2, 4, 8, 16];
     // How long each string should be
-    const STR_LENS: [usize; 4] = [8, 16, 32, 64];
+    const STR_LENS: [usize; 5] = [8, 16, 32, 64, 128];
     // Which string types to test
     const STR_TYPES: [StrType; 2] = [StrType::OwnedString, StrType::ArcStr];
 
@@ -87,6 +87,22 @@ async fn csv_report(
 async fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
     let mut rng = thread_rng();
+
+    println!("warming up executor");
+    {
+        // Tokio seems to cold-start rather slowly (possibly related to thread spawning?)
+        // Running some tasks through it first helps prevent the first or only trial
+        // from being an outlier.
+        let warmup_size = 10_000;
+        let mut tasks = Vec::with_capacity(warmup_size);
+        for _ in 0..warmup_size {
+            tasks.push(tokio::spawn(run_single(&mut rng, 2, 8, StrType::ArcStr)));
+        }
+        for task in tasks {
+            task.await??;
+        }
+    }
+    println!("running test(s)");
 
     match args {
         Cli::Single {
